@@ -17,6 +17,9 @@ import {
   getDoc,
   collection,
   getDocs,
+  query,
+  orderBy,
+  limit
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -38,6 +41,7 @@ export default function Dashboard() {
   const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, healthScore: 0, alert: "Loading..." });
   const [resourceData, setResourceData] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [historyData, setHistoryData] = useState([]);
 
   const fetchMetrics = async () => {
     const docRef = doc(db, "metrics", "current");
@@ -59,12 +63,28 @@ export default function Dashboard() {
     setLogs(logsData);
   };
 
+  const fetchHistory = async () => {
+    const q = query(collection(db, "metrics-history"), orderBy("timestamp", "desc"), limit(30));
+    const snapshot = await getDocs(q);
+    const history = snapshot.docs.map(doc => {
+      const d = doc.data();
+      return {
+        name: new Date(d.timestamp).toLocaleTimeString(),
+        cpu: d.cpu,
+        memory: d.memory
+      };
+    }).reverse();
+    setHistoryData(history);
+  };
+
   useEffect(() => {
     fetchMetrics();
     fetchRecoveryLogs();
+    fetchHistory();
     const interval = setInterval(() => {
       fetchMetrics();
       fetchRecoveryLogs();
+      fetchHistory();
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -86,6 +106,7 @@ export default function Dashboard() {
     alert("Manual Health Scan Triggered ✅");
     fetchMetrics();
     fetchRecoveryLogs();
+    fetchHistory();
   };
 
   return (
@@ -165,6 +186,20 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="bg-cyan-100 p-4 rounded-xl shadow col-span-1 md:col-span-3">
+          <h2 className="text-xl font-bold mb-2">📈 Historical Performance</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={historyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
+              <Line type="monotone" dataKey="memory" stroke="#22c55e" />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
