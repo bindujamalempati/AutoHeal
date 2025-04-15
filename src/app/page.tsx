@@ -1,77 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { db } from "../lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { useEffect, useState } from 'react';
+import { initializeApp } from "firebase/app";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ResponsiveContainer,
-} from "recharts";
+  getFirestore, doc, getDoc
+} from "firebase/firestore";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
+} from 'recharts';
+
+// 🔐 Your Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyD...your_key...",
+  authDomain: "k8s-autopilot-6lf2f.firebaseapp.com",
+  projectId: "k8s-autopilot-6lf2f",
+  storageBucket: "k8s-autopilot-6lf2f.appspot.com",
+  messagingSenderId: "829279917467",
+  appId: "1:829279917467:web:xxxxxxx"
+};
+
+// ✅ Init Firebase once
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 export default function Dashboard() {
   const [dark, setDark] = useState(false);
   const [startTime] = useState(Date.now());
-  const [uptime, setUptime] = useState("");
+  const [uptime, setUptime] = useState('');
   const [refreshTime, setRefreshTime] = useState(Date.now());
-  const [resourceData, setResourceData] = useState([
-    { name: "12:00", cpu: 0, memory: 0 },
-    { name: "12:05", cpu: 0, memory: 0 },
-    { name: "12:10", cpu: 0, memory: 0 },
-  ]);
-  const [healthScore, setHealthScore] = useState(0);
-  const [alertStatus, setAlertStatus] = useState("");
+
+  const [metrics, setMetrics] = useState({
+    cpu: 0,
+    memory: 0,
+    healthScore: 0,
+    alert: "Loading..."
+  });
+
+  const fetchMetrics = async () => {
+    const docRef = doc(db, "metrics", "current");
+    const snapshot = await getDoc(docRef);
+    if (snapshot.exists()) {
+      setMetrics(snapshot.data());
+    }
+  };
 
   useEffect(() => {
+    fetchMetrics();
     const interval = setInterval(() => {
-      const diff = Date.now() - startTime;
-      const hours = Math.floor(diff / 3600000);
-      const minutes = Math.floor((diff % 3600000) / 60000);
-      const seconds = Math.floor((diff % 60000) / 1000);
-      setUptime(`${hours}h ${minutes}m ${seconds}s`);
-    }, 1000);
+      fetchMetrics();
+    }, 5000); // every 5 seconds
+
     return () => clearInterval(interval);
-  }, [startTime]);
+  }, []);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "metrics", "current"), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        const timestamp = new Date().toLocaleTimeString().slice(0, 5);
-        setResourceData((prev) => [
-          ...prev.slice(1),
-          {
-            name: timestamp,
-            cpu: data.cpu,
-            memory: data.memory,
-          },
-        ]);
-        setHealthScore(data.healthScore);
-        setAlertStatus(data.alert);
-      }
-    });
+    const timer = setInterval(() => {
+      const diff = Date.now() - startTime;
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setUptime(`${h}h ${m}m ${s}s`);
+    }, 1000);
 
-    return () => unsub();
-  }, []);
+    return () => clearInterval(timer);
+  }, [startTime]);
 
   const handleManualRefresh = () => {
     setRefreshTime(Date.now());
-    alert("Manual Health Scan Triggered! ✅");
+    fetchMetrics();
+    alert('🔁 Manual Health Scan Triggered!');
   };
 
+  const chartData = [
+    {
+      name: new Date().toLocaleTimeString(),
+      cpu: metrics.cpu,
+      memory: metrics.memory
+    }
+  ];
+
   return (
-    <div className={`min-h-screen p-6 ${dark ? "bg-gray-900 text-white" : "bg-gray-100 text-black"}`}>
+    <div className={`min-h-screen p-6 ${dark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-black'}`}>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">AutoHeal – Monitor. React. Recover.</h1>
-        <button
-          onClick={() => setDark(!dark)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-        >
-          Toggle {dark ? "Light" : "Dark"} Mode
+        <button onClick={() => setDark(!dark)} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+          Toggle {dark ? 'Light' : 'Dark'} Mode
         </button>
       </div>
 
@@ -82,26 +95,26 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-green-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🟢 Service Status</h2>
-          <p>All systems are operational and stable.</p>
+          <p>{metrics.alert}</p>
         </div>
 
         <div className="bg-blue-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">📊 Resource Usage</h2>
           <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={resourceData}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis />
+              <YAxis domain={[0, 100]} />
               <Tooltip />
-              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
-              <Line type="monotone" dataKey="memory" stroke="#22c55e" />
+              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" name="CPU (%)" />
+              <Line type="monotone" dataKey="memory" stroke="#22c55e" name="Memory (%)" />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="bg-yellow-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🔔 Alerts</h2>
-          <p>{alertStatus}</p>
+          <p>{metrics.alert}</p>
         </div>
 
         <div className="bg-purple-200 p-4 rounded-xl shadow col-span-1 md:col-span-2">
@@ -116,7 +129,7 @@ export default function Dashboard() {
 
         <div className="bg-indigo-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🧠 Daily Health Score</h2>
-          <p>System Health: <strong>{healthScore}%</strong> ✅</p>
+          <p>System Health: <strong>{metrics.healthScore}%</strong> ✅</p>
         </div>
 
         <div className="bg-gray-200 p-4 rounded-xl shadow">
@@ -136,7 +149,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-6 text-xs text-gray-600 italic">
-        🛈 Hover over metrics or sections to learn more. Friendly for all users — no technical knowledge required!
+        🛈 Metrics update every 5 seconds from your local system. Friendly for all users — no technical knowledge required!
       </div>
     </div>
   );
