@@ -1,90 +1,77 @@
 "use client";
-
-import { useEffect, useState } from 'react';
-import { initializeApp } from "firebase/app";
-import {
-  getFirestore, doc, getDoc
-} from "firebase/firestore";
+import { useEffect, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
-} from 'recharts';
+} from "recharts";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 
-// 🔐 Your Firebase config
+// Firebase config (from your Firebase settings)
 const firebaseConfig = {
-  apiKey: "AIzaSyD...your_key...",
+  apiKey: "AIzaSyD...yourKey",
   authDomain: "k8s-autopilot-6lf2f.firebaseapp.com",
   projectId: "k8s-autopilot-6lf2f",
   storageBucket: "k8s-autopilot-6lf2f.appspot.com",
   messagingSenderId: "829279917467",
-  appId: "1:829279917467:web:xxxxxxx"
+  appId: "1:829279917467:web:xxxxxxxx"
 };
 
-// ✅ Init Firebase once
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function Dashboard() {
   const [dark, setDark] = useState(false);
-  const [startTime] = useState(Date.now());
   const [uptime, setUptime] = useState('');
   const [refreshTime, setRefreshTime] = useState(Date.now());
-
-  const [metrics, setMetrics] = useState({
-    cpu: 0,
-    memory: 0,
-    healthScore: 0,
-    alert: "Loading..."
-  });
+  const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, healthScore: 0, alert: "Loading..." });
+  const [resourceData, setResourceData] = useState([]);
 
   const fetchMetrics = async () => {
     const docRef = doc(db, "metrics", "current");
-    const snapshot = await getDoc(docRef);
-    if (snapshot.exists()) {
-      setMetrics(snapshot.data());
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      setMetrics(data);
+      setResourceData(prev => [
+        ...prev.slice(-5),
+        { name: new Date().toLocaleTimeString(), cpu: data.cpu, memory: data.memory }
+      ]);
     }
   };
 
   useEffect(() => {
-    fetchMetrics();
+    fetchMetrics(); // initial
     const interval = setInterval(() => {
       fetchMetrics();
-    }, 5000); // every 5 seconds
-
+    }, 5000); // update every 5 sec
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      const diff = Date.now() - startTime;
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const diff = Date.now() - start;
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
       setUptime(`${h}h ${m}m ${s}s`);
     }, 1000);
-
-    return () => clearInterval(timer);
-  }, [startTime]);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleManualRefresh = () => {
     setRefreshTime(Date.now());
+    alert("Manual Health Scan Triggered ✅");
     fetchMetrics();
-    alert('🔁 Manual Health Scan Triggered!');
   };
-
-  const chartData = [
-    {
-      name: new Date().toLocaleTimeString(),
-      cpu: metrics.cpu,
-      memory: metrics.memory
-    }
-  ];
 
   return (
     <div className={`min-h-screen p-6 ${dark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-black'}`}>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">AutoHeal – Monitor. React. Recover.</h1>
         <button onClick={() => setDark(!dark)} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-          Toggle {dark ? 'Light' : 'Dark'} Mode
+          Toggle {dark ? "Light" : "Dark"} Mode
         </button>
       </div>
 
@@ -101,13 +88,13 @@ export default function Dashboard() {
         <div className="bg-blue-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">📊 Resource Usage</h2>
           <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={chartData}>
+            <LineChart data={resourceData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis domain={[0, 100]} />
+              <YAxis />
               <Tooltip />
-              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" name="CPU (%)" />
-              <Line type="monotone" dataKey="memory" stroke="#22c55e" name="Memory (%)" />
+              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
+              <Line type="monotone" dataKey="memory" stroke="#22c55e" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -119,7 +106,7 @@ export default function Dashboard() {
 
         <div className="bg-purple-200 p-4 rounded-xl shadow col-span-1 md:col-span-2">
           <h2 className="text-xl font-bold mb-1">🛠️ Pod Health</h2>
-          <p>Placeholder for pod/container metrics and status.</p>
+          <p>Coming soon: per-container breakdown.</p>
         </div>
 
         <div className="bg-pink-200 p-4 rounded-xl shadow">
@@ -149,7 +136,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-6 text-xs text-gray-600 italic">
-        🛈 Metrics update every 5 seconds from your local system. Friendly for all users — no technical knowledge required!
+        🛈 Hover over metrics to learn more. Friendly for non-technical users!
       </div>
     </div>
   );
