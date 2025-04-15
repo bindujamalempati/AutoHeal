@@ -19,7 +19,8 @@ import {
   getDocs,
   query,
   orderBy,
-  limit
+  where,
+  Timestamp
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -42,6 +43,18 @@ export default function Dashboard() {
   const [resourceData, setResourceData] = useState([]);
   const [logs, setLogs] = useState([]);
   const [historyData, setHistoryData] = useState([]);
+  const [timeRange, setTimeRange] = useState("1h");
+
+  const getStartTime = () => {
+    const now = Date.now();
+    switch (timeRange) {
+      case "10m": return new Date(now - 10 * 60 * 1000);
+      case "1h": return new Date(now - 60 * 60 * 1000);
+      case "10h": return new Date(now - 10 * 60 * 60 * 1000);
+      case "24h": return new Date(now - 24 * 60 * 60 * 1000);
+      default: return new Date(now - 60 * 60 * 1000);
+    }
+  };
 
   const fetchMetrics = async () => {
     const docRef = doc(db, "metrics", "current");
@@ -64,7 +77,8 @@ export default function Dashboard() {
   };
 
   const fetchHistory = async () => {
-    const q = query(collection(db, "metrics-history"), orderBy("timestamp", "desc"), limit(30));
+    const startTime = Timestamp.fromDate(getStartTime());
+    const q = query(collection(db, "metrics-history"), where("timestamp", ">=", startTime), orderBy("timestamp"));
     const snapshot = await getDocs(q);
     const history = snapshot.docs.map(doc => {
       const d = doc.data();
@@ -73,7 +87,7 @@ export default function Dashboard() {
         cpu: d.cpu,
         memory: d.memory
       };
-    }).reverse();
+    });
     setHistoryData(history);
   };
 
@@ -87,7 +101,7 @@ export default function Dashboard() {
       fetchHistory();
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timeRange]);
 
   useEffect(() => {
     const start = Date.now();
@@ -190,6 +204,15 @@ export default function Dashboard() {
 
         <div className="bg-cyan-100 p-4 rounded-xl shadow col-span-1 md:col-span-3">
           <h2 className="text-xl font-bold mb-2">📈 Historical Performance</h2>
+          <div className="mb-2">
+            <label className="mr-2 font-semibold">Filter by:</label>
+            <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="p-1 rounded border">
+              <option value="10m">Last 10 minutes</option>
+              <option value="1h">Last 1 hour</option>
+              <option value="10h">Last 10 hours</option>
+              <option value="24h">Last 24 hours</option>
+            </select>
+          </div>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={historyData}>
               <CartesianGrid strokeDasharray="3 3" />
