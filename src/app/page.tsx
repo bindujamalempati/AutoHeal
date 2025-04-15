@@ -1,12 +1,24 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
 } from "recharts";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 
-// Firebase config (from your Firebase settings)
 const firebaseConfig = {
   apiKey: "AIzaSyD...yourKey",
   authDomain: "k8s-autopilot-6lf2f.firebaseapp.com",
@@ -16,16 +28,16 @@ const firebaseConfig = {
   appId: "1:829279917467:web:xxxxxxxx"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function Dashboard() {
   const [dark, setDark] = useState(false);
-  const [uptime, setUptime] = useState('');
+  const [uptime, setUptime] = useState("");
   const [refreshTime, setRefreshTime] = useState(Date.now());
   const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, healthScore: 0, alert: "Loading..." });
   const [resourceData, setResourceData] = useState([]);
+  const [logs, setLogs] = useState([]);
 
   const fetchMetrics = async () => {
     const docRef = doc(db, "metrics", "current");
@@ -34,17 +46,26 @@ export default function Dashboard() {
       const data = docSnap.data();
       setMetrics(data);
       setResourceData(prev => [
-        ...prev.slice(-5),
-        { name: new Date().toLocaleTimeString(), cpu: data.cpu, memory: data.memory }
+        ...prev.slice(-10),
+        { name: new Date().toLocaleTimeString(), cpu: data.cpu, memory: data.memory },
       ]);
     }
   };
 
+  const fetchRecoveryLogs = async () => {
+    const entriesRef = collection(db, "metrics/recoveryLogs/entries");
+    const snapshot = await getDocs(entriesRef);
+    const logsData = snapshot.docs.map(doc => doc.data()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    setLogs(logsData);
+  };
+
   useEffect(() => {
-    fetchMetrics(); // initial
+    fetchMetrics();
+    fetchRecoveryLogs();
     const interval = setInterval(() => {
       fetchMetrics();
-    }, 5000); // update every 5 sec
+      fetchRecoveryLogs();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -64,6 +85,7 @@ export default function Dashboard() {
     setRefreshTime(Date.now());
     alert("Manual Health Scan Triggered ✅");
     fetchMetrics();
+    fetchRecoveryLogs();
   };
 
   return (
@@ -132,6 +154,17 @@ export default function Dashboard() {
           >
             Run Scan
           </button>
+        </div>
+
+        <div className="bg-red-100 p-4 rounded-xl shadow col-span-1 md:col-span-3">
+          <h2 className="text-xl font-bold mb-2">🧾 Recovery Log</h2>
+          <div className="max-h-40 overflow-y-auto text-sm">
+            {logs.length === 0 ? <p>No recovery events yet.</p> : logs.map((log, i) => (
+              <div key={i} className="mb-2 border-b pb-1">
+                <p><strong>{new Date(log.timestamp).toLocaleString()}</strong> — {log.issue} → {log.recovery_action} ✅</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
