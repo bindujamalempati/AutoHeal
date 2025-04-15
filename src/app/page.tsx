@@ -1,21 +1,30 @@
 "use client";
-import { useEffect, useState } from 'react';
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-} from 'recharts';
 
-const resourceData = [
-  { name: '12:00', cpu: 30, memory: 50 },
-  { name: '12:05', cpu: 40, memory: 55 },
-  { name: '12:10', cpu: 35, memory: 53 },
-  { name: '12:15', cpu: 37, memory: 52 },
-];
+import { useEffect, useState } from "react";
+import { db } from "../lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
 
 export default function Dashboard() {
   const [dark, setDark] = useState(false);
   const [startTime] = useState(Date.now());
-  const [uptime, setUptime] = useState('');
+  const [uptime, setUptime] = useState("");
   const [refreshTime, setRefreshTime] = useState(Date.now());
+  const [resourceData, setResourceData] = useState([
+    { name: "12:00", cpu: 0, memory: 0 },
+    { name: "12:05", cpu: 0, memory: 0 },
+    { name: "12:10", cpu: 0, memory: 0 },
+  ]);
+  const [healthScore, setHealthScore] = useState(0);
+  const [alertStatus, setAlertStatus] = useState("");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -28,17 +37,41 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [startTime]);
 
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "metrics", "current"), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        const timestamp = new Date().toLocaleTimeString().slice(0, 5);
+        setResourceData((prev) => [
+          ...prev.slice(1),
+          {
+            name: timestamp,
+            cpu: data.cpu,
+            memory: data.memory,
+          },
+        ]);
+        setHealthScore(data.healthScore);
+        setAlertStatus(data.alert);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
   const handleManualRefresh = () => {
     setRefreshTime(Date.now());
-    alert('Manual Health Scan Triggered! ✅');
+    alert("Manual Health Scan Triggered! ✅");
   };
 
   return (
-    <div className={`min-h-screen p-6 ${dark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-black'}`}>
+    <div className={`min-h-screen p-6 ${dark ? "bg-gray-900 text-white" : "bg-gray-100 text-black"}`}>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">AutoHeal – Monitor. React. Recover.</h1>
-        <button onClick={() => setDark(!dark)} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-          Toggle {dark ? 'Light' : 'Dark'} Mode
+        <button
+          onClick={() => setDark(!dark)}
+          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+        >
+          Toggle {dark ? "Light" : "Dark"} Mode
         </button>
       </div>
 
@@ -68,7 +101,7 @@ export default function Dashboard() {
 
         <div className="bg-yellow-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🔔 Alerts</h2>
-          <p>No recent alerts. Everything is stable!</p>
+          <p>{alertStatus}</p>
         </div>
 
         <div className="bg-purple-200 p-4 rounded-xl shadow col-span-1 md:col-span-2">
@@ -83,7 +116,7 @@ export default function Dashboard() {
 
         <div className="bg-indigo-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🧠 Daily Health Score</h2>
-          <p>System Health: <strong>92%</strong> ✅</p>
+          <p>System Health: <strong>{healthScore}%</strong> ✅</p>
         </div>
 
         <div className="bg-gray-200 p-4 rounded-xl shadow">
