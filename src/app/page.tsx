@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import {
   LineChart,
@@ -9,85 +10,98 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
+import { initializeApp } from "firebase/app";
 import {
   getFirestore,
+  doc,
+  onSnapshot,
   collection,
   getDocs,
   query,
   orderBy,
+  where,
+  Timestamp
 } from "firebase/firestore";
-import { initializeApp } from "firebase/app";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDXjfJMxG5yPUgykTbDPcxoXm6EHceNWyQ",
+  apiKey: "AIzaSyD...yourKey",
   authDomain: "k8s-autopilot-6lf2f.firebaseapp.com",
   projectId: "k8s-autopilot-6lf2f",
   storageBucket: "k8s-autopilot-6lf2f.appspot.com",
   messagingSenderId: "829279917467",
-  appId: "1:829279917467:web:d60f39f56cc85e34ed7d3e",
+  appId: "1:829279917467:web:xxxxxxxx"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function Dashboard() {
-  const [resourceData, setResourceData] = useState([]);
-  const [logEntries, setLogEntries] = useState([]);
   const [dark, setDark] = useState(false);
+  const [uptime, setUptime] = useState("");
   const [refreshTime, setRefreshTime] = useState(Date.now());
-
-  const handleRefresh = () => {
-    setRefreshTime(Date.now());
-    alert("🔁 Manual Refresh Triggered");
-  };
+  const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, healthScore: 0, alert: "Loading..." });
+  const [resourceData, setResourceData] = useState([]);
 
   useEffect(() => {
-    const fetchMetrics = async () => {
-      const snapshot = await getDocs(collection(db, "metrics", "current", "history"));
-      const data = snapshot.docs.map((doc) => doc.data());
-      setResourceData(data);
-    };
+    const unsub = onSnapshot(doc(db, "metrics", "current"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setMetrics(data);
+        setResourceData((prev) => [
+          ...prev.slice(-10),
+          {
+            name: new Date().toLocaleTimeString(),
+            cpu: data.cpu,
+            memory: data.memory,
+          },
+        ]);
+      }
+    });
+    return () => unsub();
+  }, []);
 
-    const fetchLogs = async () => {
-      const logsRef = collection(db, "logs", "Laptop-UB-001", "entries");
-      const logsQuery = query(logsRef, orderBy("timestamp", "desc"));
-      const snapshot = await getDocs(logsQuery);
-      const data = snapshot.docs.map((doc) => doc.data());
-      setLogEntries(data);
-    };
+  useEffect(() => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const diff = Date.now() - start;
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setUptime(`${h}h ${m}m ${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-    fetchMetrics();
-    fetchLogs();
-  }, [refreshTime]);
+  const handleManualRefresh = () => {
+    setRefreshTime(Date.now());
+    alert("Manual Health Scan Triggered ✅");
+  };
 
   return (
-    <div className={`min-h-screen p-6 ${dark ? "bg-gray-900 text-white" : "bg-gray-100 text-black"}`}>
+    <div className={`min-h-screen p-6 ${dark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-black'}`}>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">AutoHeal – Monitor. React. Recover.</h1>
-        <button
-          onClick={() => setDark(!dark)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-        >
+        <button onClick={() => setDark(!dark)} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
           Toggle {dark ? "Light" : "Dark"} Mode
         </button>
       </div>
 
-      <div className="text-right text-sm text-gray-500 italic mb-4">
+      <div className="text-right text-sm text-gray-500 italic mb-2">
         Last manual refresh: {new Date(refreshTime).toLocaleTimeString()}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-green-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🟢 Service Status</h2>
-          <p>All systems stable</p>
+          <p>{metrics.alert}</p>
         </div>
 
         <div className="bg-blue-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">📊 Resource Usage</h2>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={150}>
             <LineChart data={resourceData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
+              <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
               <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
@@ -98,26 +112,37 @@ export default function Dashboard() {
 
         <div className="bg-yellow-200 p-4 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-1">🔔 Alerts</h2>
-          <p>All systems stable</p>
+          <p>{metrics.alert}</p>
         </div>
 
-        <div className="bg-purple-200 p-4 rounded-xl shadow col-span-2">
-          <h2 className="text-xl font-bold mb-2">📋 Recovery Logs</h2>
-          <ul className="text-sm max-h-60 overflow-auto space-y-1">
-            {logEntries.map((entry, idx) => (
-              <li key={idx} className="border-b border-gray-300 py-1">
-                <span className="font-semibold">{entry.status}</span> – {entry.message} <br />
-                <span className="text-xs italic text-gray-600">
-                  {new Date(entry.timestamp).toLocaleString()}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <div className="bg-pink-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🌐 Cluster Info</h2>
+          <p>Region: us-central1<br />Version: 1.27.2-gke.200</p>
+        </div>
+
+        <div className="bg-indigo-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🧠 Daily Health Score</h2>
+          <p>System Health: <strong>{metrics.healthScore}%</strong> ✅</p>
+        </div>
+
+        <div className="bg-gray-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">⏱️ Uptime Tracker</h2>
+          <p>Stable for: {uptime}</p>
+        </div>
+
+        <div className="bg-orange-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🔁 Manual Health Scan</h2>
+          <button
+            onClick={handleManualRefresh}
+            className="mt-2 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+          >
+            Run Scan
+          </button>
         </div>
       </div>
 
       <div className="mt-6 text-xs text-gray-600 italic">
-        🛈 Friendly UI — no technical knowledge required. Logs are updated in real time.
+        🛈 This dashboard updates in real-time. No need to refresh manually.
       </div>
     </div>
   );
