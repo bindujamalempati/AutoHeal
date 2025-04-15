@@ -44,6 +44,8 @@ export default function Dashboard() {
   const [logs, setLogs] = useState([]);
   const [historyData, setHistoryData] = useState([]);
   const [timeRange, setTimeRange] = useState("1h");
+  const [showForecast, setShowForecast] = useState(true);
+  const [forecastSummary, setForecastSummary] = useState({ cpu: 0, memory: 0 });
 
   const getStartTime = () => {
     const now = Date.now();
@@ -100,7 +102,8 @@ export default function Dashboard() {
       forecast_memory: Math.round(avgMem)
     }));
 
-    const extended = [...history, ...forecastPoints];
+    setForecastSummary({ cpu: Math.round(avgCPU), memory: Math.round(avgMem) });
+    const extended = showForecast ? [...history, ...forecastPoints] : history;
     setHistoryData(extended);
   };
 
@@ -114,7 +117,7 @@ export default function Dashboard() {
       fetchHistory();
     }, 5000);
     return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [timeRange, showForecast]);
 
   useEffect(() => {
     const start = Date.now();
@@ -150,18 +153,87 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* ... existing UI blocks ... */}
+        <div className="bg-green-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🟢 Service Status</h2>
+          <p>{metrics.alert}</p>
+        </div>
+
+        <div className="bg-blue-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">📊 Resource Usage</h2>
+          <ResponsiveContainer width="100%" height={150}>
+            <LineChart data={resourceData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
+              <Line type="monotone" dataKey="memory" stroke="#22c55e" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-yellow-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🔔 Alerts</h2>
+          <p>{metrics.alert}</p>
+        </div>
+
+        <div className="bg-purple-200 p-4 rounded-xl shadow col-span-1 md:col-span-2">
+          <h2 className="text-xl font-bold mb-1">🛠️ Pod Health</h2>
+          <p>Coming soon: per-container breakdown.</p>
+        </div>
+
+        <div className="bg-pink-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🌐 Cluster Info</h2>
+          <p>Region: us-central1<br />Version: 1.27.2-gke.200</p>
+        </div>
+
+        <div className="bg-indigo-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🧠 Daily Health Score</h2>
+          <p>System Health: <strong>{metrics.healthScore}%</strong> ✅</p>
+        </div>
+
+        <div className="bg-gray-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">⏱️ Uptime Tracker</h2>
+          <p>Stable for: {uptime}</p>
+        </div>
+
+        <div className="bg-orange-200 p-4 rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-1">🔁 Manual Health Scan</h2>
+          <button
+            onClick={handleManualRefresh}
+            className="mt-2 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+          >
+            Run Scan
+          </button>
+        </div>
+
+        <div className="bg-red-100 p-4 rounded-xl shadow col-span-1 md:col-span-3">
+          <h2 className="text-xl font-bold mb-2">🧾 Recovery Log</h2>
+          <div className="max-h-40 overflow-y-auto text-sm">
+            {logs.length === 0 ? <p>No recovery events yet.</p> : logs.map((log, i) => (
+              <div key={i} className="mb-2 border-b pb-1">
+                <p><strong>{new Date(log.timestamp).toLocaleString()}</strong> — {log.issue} → {log.recovery_action} ✅</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div className="bg-cyan-100 p-4 rounded-xl shadow col-span-1 md:col-span-3">
           <h2 className="text-xl font-bold mb-2">📈 Historical Performance</h2>
-          <div className="mb-2">
-            <label className="mr-2 font-semibold">Filter by:</label>
-            <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="p-1 rounded border">
-              <option value="10m">Last 10 minutes</option>
-              <option value="1h">Last 1 hour</option>
-              <option value="10h">Last 10 hours</option>
-              <option value="24h">Last 24 hours</option>
-            </select>
+          <div className="flex justify-between items-center mb-2">
+            <div>
+              <label className="mr-2 font-semibold">Filter by:</label>
+              <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="p-1 rounded border">
+                <option value="10m">Last 10 minutes</option>
+                <option value="1h">Last 1 hour</option>
+                <option value="10h">Last 10 hours</option>
+                <option value="24h">Last 24 hours</option>
+              </select>
+            </div>
+            <div>
+              <label className="mr-2 font-semibold">Show Forecast:</label>
+              <input type="checkbox" checked={showForecast} onChange={() => setShowForecast(!showForecast)} />
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={historyData}>
@@ -171,10 +243,15 @@ export default function Dashboard() {
               <Tooltip />
               <Line type="monotone" dataKey="cpu" stroke="#3b82f6" />
               <Line type="monotone" dataKey="memory" stroke="#22c55e" />
-              <Line type="monotone" dataKey="forecast_cpu" stroke="#6366f1" strokeDasharray="5 5" dot={false} />
-              <Line type="monotone" dataKey="forecast_memory" stroke="#16a34a" strokeDasharray="5 5" dot={false} />
+              {showForecast && <Line type="monotone" dataKey="forecast_cpu" stroke="#6366f1" strokeDasharray="5 5" dot={false} />}
+              {showForecast && <Line type="monotone" dataKey="forecast_memory" stroke="#16a34a" strokeDasharray="5 5" dot={false} />}
             </LineChart>
           </ResponsiveContainer>
+          {showForecast && (
+            <div className="text-sm text-gray-700 italic mt-2">
+              Forecast (next ~15s): CPU ~ {forecastSummary.cpu}% | Memory ~ {forecastSummary.memory}%
+            </div>
+          )}
         </div>
       </div>
 
