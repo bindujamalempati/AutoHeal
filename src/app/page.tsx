@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { onSnapshot, collection, getFirestore } from "firebase/firestore";
-import { app } from "@/utils/firebaseConfig";
+import { db } from '@/utils/firebaseClient';
 import { saveAs } from "file-saver";
 
 const db = getFirestore(app);
