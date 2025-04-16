@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { db } from '@/utils/firebaseClient'
+import { db } from '../../../utils/firebaseClient'
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore'
 
 export default function RealtimeLogPage() {
